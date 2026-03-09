@@ -2,58 +2,75 @@ import java.util.*;
 
 public class Assignment1 {
 
-    class TokenBucket {
-        int tokens;
-        int maxTokens;
-        long lastRefillTime;
+    class TrieNode {
+        HashMap<Character, TrieNode> children = new HashMap<>();
+        boolean isEnd = false;
+    }
 
-        TokenBucket(int maxTokens) {
-            this.maxTokens = maxTokens;
-            this.tokens = maxTokens;
-            this.lastRefillTime = System.currentTimeMillis();
+    private TrieNode root = new TrieNode();
+    private HashMap<String, Integer> frequency = new HashMap<>();
+
+    public void addQuery(String query) {
+
+        frequency.put(query, frequency.getOrDefault(query, 0) + 1);
+
+        TrieNode node = root;
+
+        for (char c : query.toCharArray()) {
+            node.children.putIfAbsent(c, new TrieNode());
+            node = node.children.get(c);
+        }
+
+        node.isEnd = true;
+    }
+
+    public List<String> search(String prefix) {
+
+        TrieNode node = root;
+
+        for (char c : prefix.toCharArray()) {
+            if (!node.children.containsKey(c)) {
+                return new ArrayList<>();
+            }
+            node = node.children.get(c);
+        }
+
+        List<String> results = new ArrayList<>();
+        collect(node, prefix, results);
+
+        PriorityQueue<String> pq = new PriorityQueue<>(
+                (a, b) -> frequency.get(a) - frequency.get(b)
+        );
+
+        for (String q : results) {
+            pq.offer(q);
+            if (pq.size() > 10) {
+                pq.poll();
+            }
+        }
+
+        List<String> top = new ArrayList<>();
+
+        while (!pq.isEmpty()) {
+            top.add(pq.poll());
+        }
+
+        Collections.reverse(top);
+        return top;
+    }
+
+    private void collect(TrieNode node, String prefix, List<String> results) {
+
+        if (node.isEnd) {
+            results.add(prefix);
+        }
+
+        for (Map.Entry<Character, TrieNode> entry : node.children.entrySet()) {
+            collect(entry.getValue(), prefix + entry.getKey(), results);
         }
     }
 
-    private HashMap<String, TokenBucket> clients = new HashMap<>();
-    private int limit = 1000;
-    private long window = 3600000;
-
-    public synchronized String checkRateLimit(String clientId) {
-
-        TokenBucket bucket = clients.get(clientId);
-
-        if (bucket == null) {
-            bucket = new TokenBucket(limit);
-            clients.put(clientId, bucket);
-        }
-
-        long now = System.currentTimeMillis();
-
-        if (now - bucket.lastRefillTime >= window) {
-            bucket.tokens = bucket.maxTokens;
-            bucket.lastRefillTime = now;
-        }
-
-        if (bucket.tokens > 0) {
-            bucket.tokens--;
-            return "Allowed (" + bucket.tokens + " requests remaining)";
-        } else {
-            long retry = (window - (now - bucket.lastRefillTime)) / 1000;
-            return "Denied (0 requests remaining, retry after " + retry + "s)";
-        }
-    }
-
-    public String getRateLimitStatus(String clientId) {
-
-        TokenBucket bucket = clients.get(clientId);
-
-        if (bucket == null) {
-            return "{used: 0, limit: " + limit + "}";
-        }
-
-        int used = bucket.maxTokens - bucket.tokens;
-        long reset = bucket.lastRefillTime + window;
-
-        return "{used: " + used + ", limit: " + bucket.maxTokens + ", reset: " + reset + "}";
+    public void updateFrequency(String query) {
+        frequency.put(query, frequency.getOrDefault(query, 0) + 1);
     }
 }
