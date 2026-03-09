@@ -2,75 +2,87 @@ import java.util.*;
 
 public class Assignment1 {
 
-    class TrieNode {
-        HashMap<Character, TrieNode> children = new HashMap<>();
-        boolean isEnd = false;
+    class Vehicle {
+        String licensePlate;
+        long entryTime;
+
+        Vehicle(String licensePlate) {
+            this.licensePlate = licensePlate;
+            this.entryTime = System.currentTimeMillis();
+        }
     }
 
-    private TrieNode root = new TrieNode();
-    private HashMap<String, Integer> frequency = new HashMap<>();
+    private class Spot {
+        Vehicle vehicle;
+        boolean occupied;
 
-    public void addQuery(String query) {
+        Spot() {
+            vehicle = null;
+            occupied = false;
+        }
+    }
 
-        frequency.put(query, frequency.getOrDefault(query, 0) + 1);
+    private Spot[] parkingLot;
+    private int capacity = 500;
+    private int totalProbes = 0;
+    private int totalParked = 0;
 
-        TrieNode node = root;
+    public Assignment1() {
+        parkingLot = new Spot[capacity];
+        for (int i = 0; i < capacity; i++) {
+            parkingLot[i] = new Spot();
+        }
+    }
 
-        for (char c : query.toCharArray()) {
-            node.children.putIfAbsent(c, new TrieNode());
-            node = node.children.get(c);
+    private int hash(String licensePlate) {
+        return Math.abs(licensePlate.hashCode()) % capacity;
+    }
+
+    public String parkVehicle(String licensePlate) {
+        int idx = hash(licensePlate);
+        int probes = 0;
+
+        while (parkingLot[idx].occupied) {
+            idx = (idx + 1) % capacity;
+            probes++;
         }
 
-        node.isEnd = true;
+        parkingLot[idx].vehicle = new Vehicle(licensePlate);
+        parkingLot[idx].occupied = true;
+        totalProbes += probes;
+        totalParked++;
+
+        return "Assigned spot #" + idx + " (" + probes + " probes)";
     }
 
-    public List<String> search(String prefix) {
+    public String exitVehicle(String licensePlate) {
+        int idx = hash(licensePlate);
+        int probes = 0;
 
-        TrieNode node = root;
+        while (probes < capacity) {
+            if (parkingLot[idx].occupied && parkingLot[idx].vehicle.licensePlate.equals(licensePlate)) {
+                long durationMs = System.currentTimeMillis() - parkingLot[idx].vehicle.entryTime;
+                double hours = durationMs / 3600000.0;
+                double fee = Math.round(hours * 5 * 100.0) / 100.0;
 
-        for (char c : prefix.toCharArray()) {
-            if (!node.children.containsKey(c)) {
-                return new ArrayList<>();
+                parkingLot[idx].vehicle = null;
+                parkingLot[idx].occupied = false;
+                totalParked--;
+
+                return "Spot #" + idx + " freed, Duration: " + String.format("%.2f", hours) + "h, Fee: $" + fee;
             }
-            node = node.children.get(c);
+
+            idx = (idx + 1) % capacity;
+            probes++;
         }
 
-        List<String> results = new ArrayList<>();
-        collect(node, prefix, results);
-
-        PriorityQueue<String> pq = new PriorityQueue<>(
-                (a, b) -> frequency.get(a) - frequency.get(b)
-        );
-
-        for (String q : results) {
-            pq.offer(q);
-            if (pq.size() > 10) {
-                pq.poll();
-            }
-        }
-
-        List<String> top = new ArrayList<>();
-
-        while (!pq.isEmpty()) {
-            top.add(pq.poll());
-        }
-
-        Collections.reverse(top);
-        return top;
+        return "Vehicle not found";
     }
 
-    private void collect(TrieNode node, String prefix, List<String> results) {
+    public String getStatistics() {
+        double occupancy = (totalParked * 100.0) / capacity;
+        double avgProbes = totalParked == 0 ? 0 : totalProbes * 1.0 / totalParked;
 
-        if (node.isEnd) {
-            results.add(prefix);
-        }
-
-        for (Map.Entry<Character, TrieNode> entry : node.children.entrySet()) {
-            collect(entry.getValue(), prefix + entry.getKey(), results);
-        }
-    }
-
-    public void updateFrequency(String query) {
-        frequency.put(query, frequency.getOrDefault(query, 0) + 1);
+        return "Occupancy: " + String.format("%.1f", occupancy) + "%, Avg Probes: " + String.format("%.2f", avgProbes);
     }
 }
