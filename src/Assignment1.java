@@ -2,51 +2,49 @@ import java.util.*;
 
 public class Assignment1 {
 
-    private HashMap<String, Set<String>> ngramIndex = new HashMap<>();
-    private HashMap<String, List<String>> documentNgrams = new HashMap<>();
-    private int n = 5;
+    private HashMap<String, Integer> pageViews = new HashMap<>();
+    private HashMap<String, Set<String>> uniqueVisitors = new HashMap<>();
+    private HashMap<String, Integer> trafficSources = new HashMap<>();
 
-    public void addDocument(String docId, String text) {
-        List<String> words = Arrays.asList(text.split("\\s+"));
-        List<String> ngrams = new ArrayList<>();
+    public void processEvent(String url, String userId, String source) {
 
-        for (int i = 0; i <= words.size() - n; i++) {
-            String gram = String.join(" ", words.subList(i, i + n));
-            ngrams.add(gram);
+        pageViews.put(url, pageViews.getOrDefault(url, 0) + 1);
 
-            ngramIndex.putIfAbsent(gram, new HashSet<>());
-            ngramIndex.get(gram).add(docId);
-        }
+        uniqueVisitors.putIfAbsent(url, new HashSet<>());
+        uniqueVisitors.get(url).add(userId);
 
-        documentNgrams.put(docId, ngrams);
+        trafficSources.put(source, trafficSources.getOrDefault(source, 0) + 1);
     }
 
-    public String analyzeDocument(String docId) {
-        List<String> grams = documentNgrams.get(docId);
-        if (grams == null) {
-            return "Document not found";
+    public String getDashboard() {
+
+        List<Map.Entry<String, Integer>> pages = new ArrayList<>(pageViews.entrySet());
+        pages.sort((a, b) -> b.getValue() - a.getValue());
+
+        String result = "Top Pages:\n";
+        int count = 0;
+
+        for (Map.Entry<String, Integer> entry : pages) {
+            if (count == 10) break;
+
+            String url = entry.getKey();
+            int views = entry.getValue();
+            int unique = uniqueVisitors.get(url).size();
+
+            result += (count + 1) + ". " + url + " - " + views + " views (" + unique + " unique)\n";
+            count++;
         }
 
-        HashMap<String, Integer> matchCount = new HashMap<>();
-
-        for (String gram : grams) {
-            Set<String> docs = ngramIndex.get(gram);
-            if (docs != null) {
-                for (String otherDoc : docs) {
-                    if (!otherDoc.equals(docId)) {
-                        matchCount.put(otherDoc, matchCount.getOrDefault(otherDoc, 0) + 1);
-                    }
-                }
-            }
+        int totalSourceVisits = 0;
+        for (int v : trafficSources.values()) {
+            totalSourceVisits += v;
         }
 
-        String result = "";
-        int total = grams.size();
+        result += "\nTraffic Sources:\n";
 
-        for (Map.Entry<String, Integer> entry : matchCount.entrySet()) {
-            double similarity = (entry.getValue() * 100.0) / total;
-            result += "Match with " + entry.getKey() + " → " + entry.getValue() +
-                    " n-grams, Similarity: " + similarity + "%\n";
+        for (Map.Entry<String, Integer> entry : trafficSources.entrySet()) {
+            double percent = (entry.getValue() * 100.0) / totalSourceVisits;
+            result += entry.getKey() + ": " + percent + "%\n";
         }
 
         return result;
