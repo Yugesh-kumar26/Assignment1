@@ -2,87 +2,104 @@ import java.util.*;
 
 public class Assignment1 {
 
-    class Vehicle {
-        String licensePlate;
-        long entryTime;
+    class VideoData {
+        String videoId;
+        String content;
 
-        Vehicle(String licensePlate) {
-            this.licensePlate = licensePlate;
-            this.entryTime = System.currentTimeMillis();
+        VideoData(String videoId, String content) {
+            this.videoId = videoId;
+            this.content = content;
         }
     }
 
-    private class Spot {
-        Vehicle vehicle;
-        boolean occupied;
+    private int L1Capacity = 10000;
+    private int L2Capacity = 100000;
 
-        Spot() {
-            vehicle = null;
-            occupied = false;
-        }
-    }
+    private LinkedHashMap<String, VideoData> L1Cache;
+    private HashMap<String, String> L2Cache;
+    private HashMap<String, VideoData> L3Database;
 
-    private Spot[] parkingLot;
-    private int capacity = 500;
-    private int totalProbes = 0;
-    private int totalParked = 0;
+    private HashMap<String, Integer> accessCount;
+
+    private int L1Hits = 0, L1Misses = 0;
+    private int L2Hits = 0, L2Misses = 0;
+    private int L3Hits = 0, L3Misses = 0;
 
     public Assignment1() {
-        parkingLot = new Spot[capacity];
-        for (int i = 0; i < capacity; i++) {
-            parkingLot[i] = new Spot();
-        }
-    }
-
-    private int hash(String licensePlate) {
-        return Math.abs(licensePlate.hashCode()) % capacity;
-    }
-
-    public String parkVehicle(String licensePlate) {
-        int idx = hash(licensePlate);
-        int probes = 0;
-
-        while (parkingLot[idx].occupied) {
-            idx = (idx + 1) % capacity;
-            probes++;
-        }
-
-        parkingLot[idx].vehicle = new Vehicle(licensePlate);
-        parkingLot[idx].occupied = true;
-        totalProbes += probes;
-        totalParked++;
-
-        return "Assigned spot #" + idx + " (" + probes + " probes)";
-    }
-
-    public String exitVehicle(String licensePlate) {
-        int idx = hash(licensePlate);
-        int probes = 0;
-
-        while (probes < capacity) {
-            if (parkingLot[idx].occupied && parkingLot[idx].vehicle.licensePlate.equals(licensePlate)) {
-                long durationMs = System.currentTimeMillis() - parkingLot[idx].vehicle.entryTime;
-                double hours = durationMs / 3600000.0;
-                double fee = Math.round(hours * 5 * 100.0) / 100.0;
-
-                parkingLot[idx].vehicle = null;
-                parkingLot[idx].occupied = false;
-                totalParked--;
-
-                return "Spot #" + idx + " freed, Duration: " + String.format("%.2f", hours) + "h, Fee: $" + fee;
+        L1Cache = new LinkedHashMap<String, VideoData>(L1Capacity, 0.75f, true) {
+            protected boolean removeEldestEntry(Map.Entry<String, VideoData> eldest) {
+                return size() > L1Capacity;
             }
+        };
 
-            idx = (idx + 1) % capacity;
-            probes++;
+        L2Cache = new HashMap<>();
+        L3Database = new HashMap<>();
+        accessCount = new HashMap<>();
+    }
+
+    public void addVideoToDatabase(String videoId, String content) {
+        L3Database.put(videoId, new VideoData(videoId, content));
+    }
+
+    public String getVideo(String videoId) {
+
+        if (L1Cache.containsKey(videoId)) {
+            L1Hits++;
+            return "L1 Cache HIT";
+        } else {
+            L1Misses++;
+
+            if (L2Cache.containsKey(videoId)) {
+                L2Hits++;
+                accessCount.put(videoId, accessCount.getOrDefault(videoId, 0) + 1);
+
+                if (accessCount.get(videoId) > 3 && L3Database.containsKey(videoId)) {
+                    L1Cache.put(videoId, L3Database.get(videoId));
+                }
+
+                return "L1 MISS → L2 HIT → Promoted to L1";
+            } else {
+                L2Misses++;
+
+                if (L3Database.containsKey(videoId)) {
+                    L3Hits++;
+                    accessCount.put(videoId, 1);
+
+                    if (L2Cache.size() >= L2Capacity) {
+                        Iterator<String> it = L2Cache.keySet().iterator();
+                        if (it.hasNext()) {
+                            String oldest = it.next();
+                            it.remove();
+                        }
+                    }
+
+                    L2Cache.put(videoId, videoId);
+
+                    return "L1 MISS → L2 MISS → L3 HIT → Added to L2";
+                } else {
+                    L3Misses++;
+                    return "Video not found in database";
+                }
+            }
         }
-
-        return "Vehicle not found";
     }
 
     public String getStatistics() {
-        double occupancy = (totalParked * 100.0) / capacity;
-        double avgProbes = totalParked == 0 ? 0 : totalProbes * 1.0 / totalParked;
+        int totalL1 = L1Hits + L1Misses;
+        int totalL2 = L2Hits + L2Misses;
+        int totalL3 = L3Hits + L3Misses;
 
-        return "Occupancy: " + String.format("%.1f", occupancy) + "%, Avg Probes: " + String.format("%.2f", avgProbes);
+        double L1Rate = totalL1 == 0 ? 0 : (L1Hits * 100.0) / totalL1;
+        double L2Rate = totalL2 == 0 ? 0 : (L2Hits * 100.0) / totalL2;
+        double L3Rate = totalL3 == 0 ? 0 : (L3Hits * 100.0) / totalL3;
+
+        double overallHits = L1Hits + L2Hits + L3Hits;
+        double overallTotal = overallHits + L1Misses + L2Misses + L3Misses;
+        double overallRate = overallTotal == 0 ? 0 : (overallHits * 100.0) / overallTotal;
+
+        return "L1: Hit Rate " + String.format("%.1f", L1Rate) + "%\n" +
+                "L2: Hit Rate " + String.format("%.1f", L2Rate) + "%\n" +
+                "L3: Hit Rate " + String.format("%.1f", L3Rate) + "%\n" +
+                "Overall: Hit Rate " + String.format("%.1f", overallRate) + "%";
     }
 }
