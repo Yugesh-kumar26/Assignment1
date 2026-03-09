@@ -2,70 +2,53 @@ import java.util.*;
 
 public class Assignment1 {
 
-    class DNSEntry {
-        String domain;
-        String ipAddress;
-        long expiryTime;
+    private HashMap<String, Set<String>> ngramIndex = new HashMap<>();
+    private HashMap<String, List<String>> documentNgrams = new HashMap<>();
+    private int n = 5;
 
-        DNSEntry(String domain, String ipAddress, int ttl) {
-            this.domain = domain;
-            this.ipAddress = ipAddress;
-            this.expiryTime = System.currentTimeMillis() + ttl * 1000;
+    public void addDocument(String docId, String text) {
+        List<String> words = Arrays.asList(text.split("\\s+"));
+        List<String> ngrams = new ArrayList<>();
+
+        for (int i = 0; i <= words.size() - n; i++) {
+            String gram = String.join(" ", words.subList(i, i + n));
+            ngrams.add(gram);
+
+            ngramIndex.putIfAbsent(gram, new HashSet<>());
+            ngramIndex.get(gram).add(docId);
         }
 
-        boolean isExpired() {
-            return System.currentTimeMillis() > expiryTime;
+        documentNgrams.put(docId, ngrams);
+    }
+
+    public String analyzeDocument(String docId) {
+        List<String> grams = documentNgrams.get(docId);
+        if (grams == null) {
+            return "Document not found";
         }
-    }
 
-    private int capacity = 5;
-    private LinkedHashMap<String, DNSEntry> cache;
-    private int hits = 0;
-    private int misses = 0;
+        HashMap<String, Integer> matchCount = new HashMap<>();
 
-    public Assignment1() {
-        cache = new LinkedHashMap<String, DNSEntry>(capacity, 0.75f, true) {
-            protected boolean removeEldestEntry(Map.Entry<String, DNSEntry> eldest) {
-                return size() > capacity;
-            }
-        };
-    }
-
-    public String resolve(String domain) {
-        if (cache.containsKey(domain)) {
-            DNSEntry entry = cache.get(domain);
-            if (!entry.isExpired()) {
-                hits++;
-                return "Cache HIT → " + entry.ipAddress;
-            } else {
-                cache.remove(domain);
+        for (String gram : grams) {
+            Set<String> docs = ngramIndex.get(gram);
+            if (docs != null) {
+                for (String otherDoc : docs) {
+                    if (!otherDoc.equals(docId)) {
+                        matchCount.put(otherDoc, matchCount.getOrDefault(otherDoc, 0) + 1);
+                    }
+                }
             }
         }
 
-        misses++;
-        String ip = queryUpstreamDNS(domain);
-        cache.put(domain, new DNSEntry(domain, ip, 300));
-        return "Cache MISS → Query upstream → " + ip;
-    }
+        String result = "";
+        int total = grams.size();
 
-    private String queryUpstreamDNS(String domain) {
-        Random r = new Random();
-        return "172.217.14." + (r.nextInt(200) + 1);
-    }
-
-    public String getCacheStats() {
-        int total = hits + misses;
-        double hitRate = total == 0 ? 0 : (hits * 100.0) / total;
-        return "Hit Rate: " + hitRate + "%";
-    }
-
-    public void cleanExpired() {
-        Iterator<Map.Entry<String, DNSEntry>> it = cache.entrySet().iterator();
-        while (it.hasNext()) {
-            Map.Entry<String, DNSEntry> entry = it.next();
-            if (entry.getValue().isExpired()) {
-                it.remove();
-            }
+        for (Map.Entry<String, Integer> entry : matchCount.entrySet()) {
+            double similarity = (entry.getValue() * 100.0) / total;
+            result += "Match with " + entry.getKey() + " → " + entry.getValue() +
+                    " n-grams, Similarity: " + similarity + "%\n";
         }
+
+        return result;
     }
 }
