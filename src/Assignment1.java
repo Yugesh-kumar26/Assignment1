@@ -2,51 +2,46 @@ import java.util.*;
 
 public class Assignment1 {
 
-    private HashMap<String, Integer> userMap = new HashMap<>();
-    private HashMap<String, Integer> attemptCount = new HashMap<>();
+    private HashMap<String, Integer> stockMap = new HashMap<>();
+    private HashMap<String, LinkedList<Integer>> waitingList = new HashMap<>();
 
-    public boolean checkAvailability(String username) {
-        attemptCount.put(username, attemptCount.getOrDefault(username, 0) + 1);
-        return !userMap.containsKey(username);
+    public void addProduct(String productId, int stock) {
+        stockMap.put(productId, stock);
+        waitingList.put(productId, new LinkedList<>());
     }
 
-    public void registerUser(String username, int userId) {
-        userMap.put(username, userId);
+    public synchronized String purchaseItem(String productId, int userId) {
+
+        if (!stockMap.containsKey(productId)) {
+            return "Product not found";
+        }
+
+        int stock = stockMap.get(productId);
+
+        if (stock > 0) {
+            stockMap.put(productId, stock - 1);
+            return "Success, " + (stock - 1) + " units remaining";
+        }
+        else {
+            LinkedList<Integer> queue = waitingList.get(productId);
+            queue.add(userId);
+            return "Added to waiting list, position #" + queue.size();
+        }
     }
 
-    public List<String> suggestAlternatives(String username) {
-        List<String> suggestions = new ArrayList<>();
+    public String checkStock(String productId) {
 
-        for (int i = 1; i <= 5; i++) {
-            String suggestion = username + i;
-            if (!userMap.containsKey(suggestion)) {
-                suggestions.add(suggestion);
-            }
+        if (!stockMap.containsKey(productId)) {
+            return "Product not found";
         }
 
-        String modified = username.replace("_", ".");
-        if (!userMap.containsKey(modified)) {
-            suggestions.add(modified);
-        }
-
-        return suggestions;
+        return stockMap.get(productId) + " units available";
     }
 
-    public String getMostAttempted() {
-        String most = null;
-        int max = 0;
-
-        for (Map.Entry<String, Integer> entry : attemptCount.entrySet()) {
-            if (entry.getValue() > max) {
-                max = entry.getValue();
-                most = entry.getKey();
-            }
+    public int getWaitingListSize(String productId) {
+        if (!waitingList.containsKey(productId)) {
+            return 0;
         }
-
-        if (most == null) {
-            return "No attempts yet";
-        }
-
-        return most + " (" + max + " attempts)";
+        return waitingList.get(productId).size();
     }
 }
