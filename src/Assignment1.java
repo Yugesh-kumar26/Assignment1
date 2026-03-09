@@ -2,53 +2,58 @@ import java.util.*;
 
 public class Assignment1 {
 
-    private HashMap<String, Set<String>> ngramIndex = new HashMap<>();
-    private HashMap<String, List<String>> documentNgrams = new HashMap<>();
-    private int n = 5;
+    class TokenBucket {
+        int tokens;
+        int maxTokens;
+        long lastRefillTime;
 
-    public void addDocument(String docId, String text) {
-        List<String> words = Arrays.asList(text.split("\\s+"));
-        List<String> ngrams = new ArrayList<>();
-
-        for (int i = 0; i <= words.size() - n; i++) {
-            String gram = String.join(" ", words.subList(i, i + n));
-            ngrams.add(gram);
-
-            ngramIndex.putIfAbsent(gram, new HashSet<>());
-            ngramIndex.get(gram).add(docId);
+        TokenBucket(int maxTokens) {
+            this.maxTokens = maxTokens;
+            this.tokens = maxTokens;
+            this.lastRefillTime = System.currentTimeMillis();
         }
-
-        documentNgrams.put(docId, ngrams);
     }
 
-    public String analyzeDocument(String docId) {
-        List<String> grams = documentNgrams.get(docId);
-        if (grams == null) {
-            return "Document not found";
+    private HashMap<String, TokenBucket> clients = new HashMap<>();
+    private int limit = 1000;
+    private long window = 3600000;
+
+    public synchronized String checkRateLimit(String clientId) {
+
+        TokenBucket bucket = clients.get(clientId);
+
+        if (bucket == null) {
+            bucket = new TokenBucket(limit);
+            clients.put(clientId, bucket);
         }
 
-        HashMap<String, Integer> matchCount = new HashMap<>();
+        long now = System.currentTimeMillis();
 
-        for (String gram : grams) {
-            Set<String> docs = ngramIndex.get(gram);
-            if (docs != null) {
-                for (String otherDoc : docs) {
-                    if (!otherDoc.equals(docId)) {
-                        matchCount.put(otherDoc, matchCount.getOrDefault(otherDoc, 0) + 1);
-                    }
-                }
-            }
+        if (now - bucket.lastRefillTime >= window) {
+            bucket.tokens = bucket.maxTokens;
+            bucket.lastRefillTime = now;
         }
 
-        String result = "";
-        int total = grams.size();
+        if (bucket.tokens > 0) {
+            bucket.tokens--;
+            return "Allowed (" + bucket.tokens + " requests remaining)";
+        } else {
+            long retry = (window - (now - bucket.lastRefillTime)) / 1000;
+            return "Denied (0 requests remaining, retry after " + retry + "s)";
+        }
+    }
 
-        for (Map.Entry<String, Integer> entry : matchCount.entrySet()) {
-            double similarity = (entry.getValue() * 100.0) / total;
-            result += "Match with " + entry.getKey() + " → " + entry.getValue() +
-                    " n-grams, Similarity: " + similarity + "%\n";
+    public String getRateLimitStatus(String clientId) {
+
+        TokenBucket bucket = clients.get(clientId);
+
+        if (bucket == null) {
+            return "{used: 0, limit: " + limit + "}";
         }
 
-        return result;
+        int used = bucket.maxTokens - bucket.tokens;
+        long reset = bucket.lastRefillTime + window;
+
+        return "{used: " + used + ", limit: " + bucket.maxTokens + ", reset: " + reset + "}";
     }
 }
